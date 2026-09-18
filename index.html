@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pablo Score Tracker</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Space Grotesk', 'sans-serif'],
+                        mono: ['Space Mono', 'monospace'],
+                    },
+                    colors: {
+                        te: {
+                            orange: '#ff5000',
+                            yellow: '#ccff00',
+                            gray: '#333333',
+                            dark: '#111111',
+                            light: '#e5e5e5'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #000000;
+            color: #e5e5e5;
+            text-transform: uppercase;
+        }
+        
+        /* Snappy, brutalist animations instead of bouncy ones */
+        @keyframes flash {
+            0% { background-color: #ff5000; color: #000; }
+            100% { background-color: transparent; color: inherit; }
+        }
+
+        .score-change {
+            animation: flash 0.3s steps(2) forwards;
+            color: #ff5000 !important;
+        }
+        
+        .card-enter {
+            animation: fade-in 0.2s steps(2) forwards;
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; border-color: transparent; }
+            to { opacity: 1; border-color: #333333; }
+        }
+        
+        /* Technical blocky scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000;
+            border-left: 1px solid #333;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ff5000; 
+        }
+
+        /* Remove default input styling */
+        input:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0 30px #000 inset !important;
+            -webkit-text-fill-color: white !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-te-orange selection:text-black font-sans">
+
+    <header class="border-b border-te-gray bg-black py-4 px-4 sm:px-6 sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-4 h-4 bg-te-orange"></div>
+                <h1 class="text-xl font-bold tracking-widest">
+                    PABLO<span class="text-te-orange">TRACKER</span>
+                </h1>
+            </div>
+            <button id="reset-app-btn" class="hidden font-mono text-xs tracking-widest border border-te-gray px-3 py-1.5 hover:bg-white hover:text-black hover:border-white transition-none">
+                [ SYS_RESET ]
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow flex flex-col items-center p-4 sm:p-6 w-full">
+        
+        <div id="setup-screen" class="w-full max-w-2xl bg-black border border-te-gray mt-2 sm:mt-8">
+            <div class="p-4 border-b border-te-gray bg-te-dark flex justify-between items-center">
+                <h2 class="text-sm font-bold tracking-widest">INIT_PLAYERS</h2>
+                <span class="font-mono text-xs text-gray-500">MAX:08</span>
+            </div>
+            
+            <div class="p-4 sm:p-6">
+                <div id="player-inputs-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                    <!-- Inputs injected here by JS -->
+                </div>
+                
+                <button id="add-player-btn" class="w-full sm:w-auto font-mono text-xs tracking-widest border border-te-gray px-4 py-3 hover:bg-te-gray hover:text-white transition-none disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed">
+                    + ADD_SLOT
+                </button>
+            </div>
+            
+            <div class="p-4 border-t border-te-gray bg-te-dark">
+                <button id="start-game-btn" class="w-full py-4 font-bold text-black bg-te-orange border border-te-orange hover:bg-black hover:text-te-orange transition-none disabled:opacity-30 disabled:hover:bg-te-orange disabled:hover:text-black disabled:cursor-not-allowed text-sm tracking-widest">
+                    EXECUTE_START
+                </button>
+            </div>
+        </div>
+
+        <div id="game-screen" class="w-full max-w-3xl hidden flex-col mt-2 sm:mt-6">
+            
+            <div class="flex flex-col sm:flex-row w-full justify-between items-start sm:items-end mb-6 gap-4">
+                <div>
+                    <h2 class="text-lg font-bold tracking-widest flex items-center gap-2">
+                        <div class="w-2 h-2 bg-te-yellow animate-pulse"></div>
+                        ACTIVE_SESSION
+                    </h2>
+                    <p class="text-gray-500 font-mono text-xs mt-2 border-l-2 border-te-gray pl-2">
+                        WIN = ALL_OTHERS +10<br>
+                        LOS = SELF +15
+                    </p>
+                </div>
+                <button id="reset-scores-btn" class="font-mono text-xs tracking-widest border border-te-yellow text-te-yellow px-4 py-2 hover:bg-te-yellow hover:text-black transition-none w-full sm:w-auto">
+                    CLR_SCORES
+                </button>
+            </div>
+
+            <div id="scoreboard-grid" class="flex flex-col border border-te-gray bg-black">
+                <!-- Player rows injected here -->
+            </div>
+        </div>
+
+    </main>
+
+    <div id="edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/80" id="edit-modal-backdrop"></div>
+        <div class="relative bg-black border border-te-orange w-full max-w-xs shadow-[0_0_15px_rgba(255,80,0,0.2)]" id="edit-modal-content">
+            <div class="border-b border-te-orange bg-te-orange text-black p-2 px-4 flex justify-between items-center">
+                <h3 class="text-xs font-bold tracking-widest">OVR_SCORE</h3>
+                <span class="font-mono text-xs">SYS.EDIT</span>
+            </div>
+            
+            <div class="p-6">
+                <p id="edit-player-name" class="font-mono text-gray-400 text-xs mb-4">P_NAME</p>
+                
+                <div class="mb-6">
+                    <input type="number" id="new-score-input" class="w-full bg-te-dark border border-te-gray py-4 px-4 text-white font-mono text-2xl text-center focus:outline-none focus:border-te-yellow transition-none">
+                </div>
+                
+                <div class="flex gap-2">
+                    <button id="cancel-edit-btn" class="flex-1 font-mono text-xs border border-te-gray py-3 hover:bg-te-gray transition-none">
+                        ESC
+                    </button>
+                    <button id="save-edit-btn" class="flex-1 font-mono text-xs border border-te-yellow text-te-yellow py-3 hover:bg-te-yellow hover:text-black transition-none">
+                        SAVE
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // App State
+        const MAX_PLAYERS = 8;
+        const WIN_POINTS_TO_OTHERS = 10;
+        const LOSS_POINTS_TO_SELF = 15;
+        
+        let players = [];
+        let currentlyEditingIndex = -1;
+
+        // DOM Elements
+        const setupScreen = document.getElementById('setup-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const playerInputsContainer = document.getElementById('player-inputs-container');
+        const addPlayerBtn = document.getElementById('add-player-btn');
+        const startGameButton = document.getElementById('start-game-btn');
+        const scoreboardGrid = document.getElementById('scoreboard-grid');
+        const resetAppBtn = document.getElementById('reset-app-btn');
+        const resetScoresBtn = document.getElementById('reset-scores-btn');
+        
+        // Modal Elements
+        const editModal = document.getElementById('edit-modal');
+        const editModalBackdrop = document.getElementById('edit-modal-backdrop');
+        const editModalContent = document.getElementById('edit-modal-content');
+        const editPlayerName = document.getElementById('edit-player-name');
+        const newScoreInput = document.getElementById('new-score-input');
+        const cancelEditBtn = document.getElementById('cancel-edit-btn');
+        const saveEditBtn = document.getElementById('save-edit-btn');
+
+        function initSetup() {
+            playerInputsContainer.innerHTML = '';
+            addPlayerInput();
+            addPlayerInput();
+            updateSetupUI();
+        }
+
+        function addPlayerInput() {
+            const currentCount = playerInputsContainer.children.length;
+            if (currentCount >= MAX_PLAYERS) return;
+
+            const inputId = `player-input-${currentCount}`;
+            const div = document.createElement('div');
+            
+            // Brutalist input design
+            div.innerHTML = `
+                <div class="flex border border-te-gray bg-black focus-within:border-te-yellow transition-none group">
+                    <div class="font-mono text-xs text-gray-500 p-3 border-r border-te-gray bg-te-dark flex items-center group-focus-within:text-te-yellow">
+                        P0${currentCount + 1}
+                    </div>
+                    <input type="text" id="${inputId}" placeholder="ENTER_ID" 
+                        class="player-name-input w-full bg-transparent p-3 text-white font-mono text-sm uppercase placeholder-gray-600 focus:outline-none">
+                    ${currentCount >= 2 ? `
+                    <button type="button" class="remove-input-btn px-4 text-te-orange hover:bg-te-orange hover:text-black font-mono text-xs border-l border-te-gray transition-none">
+                        X
+                    </button>
+                    ` : ''}
+                </div>
+            `;
+            playerInputsContainer.appendChild(div);
+
+            const removeBtn = div.querySelector('.remove-input-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', () => {
+                    div.remove();
+                    updateSetupUI();
+                });
+            }
+            
+            const input = div.querySelector('input');
+            input.addEventListener('input', updateSetupUI);
+
+            updateSetupUI();
+            
+            if (currentCount >= 2) {
+                input.focus();
+            }
+        }
+
+        function updateSetupUI() {
+            const currentCount = playerInputsContainer.children.length;
+            addPlayerBtn.disabled = currentCount >= MAX_PLAYERS;
+
+            const inputs = document.querySelectorAll('.player-name-input');
+            let validNames = 0;
+            inputs.forEach(input => {
+                if (input.value.trim().length > 0) validNames++;
+            });
+
+            startGameButton.disabled = validNames < 2;
+        }
+
+        addPlayerBtn.addEventListener('click', addPlayerInput);
+
+        startGameButton.addEventListener('click', () => {
+            const inputs = document.querySelectorAll('.player-name-input');
+            players = [];
+            
+            inputs.forEach(input => {
+                const name = input.value.trim();
+                if (name) {
+                    players.push({
+                        name: name,
+                        score: 0
+                    });
+                }
+            });
+
+            if (players.length >= 2) {
+                setupScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+                gameScreen.classList.add('flex');
+                resetAppBtn.classList.remove('hidden');
+                renderScoreboard();
+            }
+        });
+
+        resetAppBtn.addEventListener('click', () => {
+            setupScreen.classList.remove('hidden');
+            gameScreen.classList.add('hidden');
+            gameScreen.classList.remove('flex');
+            resetAppBtn.classList.add('hidden');
+            initSetup();
+        });
+
+        resetScoresBtn.addEventListener('click', () => {
+            players.forEach((player, index) => {
+                player.score = 0;
+                animateScoreChange(index);
+            });
+            renderScoreboard();
+        });
+
+        function handleWin(winnerIndex) {
+            players.forEach((player, index) => {
+                if (index !== winnerIndex) {
+                    player.score += WIN_POINTS_TO_OTHERS;
+                    animateScoreChange(index);
+                }
+            });
+            renderScoreboard();
+        }
+
+        function handleLoss(loserIndex) {
+            players[loserIndex].score += LOSS_POINTS_TO_SELF;
+            animateScoreChange(loserIndex);
+            renderScoreboard();
+        }
+        
+        let animatingIndices = new Set();
+        
+        function animateScoreChange(index) {
+            animatingIndices.add(index);
+            setTimeout(() => {
+                animatingIndices.delete(index);
+                const scoreEl = document.getElementById(`score-${index}`);
+                if(scoreEl) {
+                    scoreEl.classList.remove('score-change');
+                }
+            }, 300);
+        }
+
+        function renderScoreboard() {
+            scoreboardGrid.innerHTML = '';
+            
+            players.forEach((player, index) => {
+                const isAnimating = animatingIndices.has(index);
+                const row = document.createElement('div');
+                const animationClass = player.rendered ? '' : 'card-enter';
+                player.rendered = true;
+                
+                const borderClass = index < players.length - 1 ? 'border-b border-te-gray' : '';
+                
+                // Brutalist scoreboard row
+                row.className = `flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-te-dark transition-none ${borderClass} ${animationClass}`;
+                row.style.animationDelay = `${index * 0.05}s`;
+                
+                row.innerHTML = `
+                    <div class="flex items-center gap-3 flex-1 min-w-0 mb-3 sm:mb-0">
+                        <span class="font-mono text-xs text-gray-500 shrink-0">0${index + 1}</span>
+                        <h3 class="font-bold tracking-widest text-sm sm:text-base truncate uppercase text-white">${player.name}</h3>
+                    </div>
+                    
+                    <div class="flex items-center justify-between sm:justify-end gap-6 shrink-0 w-full sm:w-auto">
+                        <div class="w-16 text-left sm:text-right">
+                            <span id="score-${index}" class="font-mono text-2xl font-bold tracking-tighter ${isAnimating ? 'score-change' : ''}">
+                                ${player.score}
+                            </span>
+                        </div>
+                        
+                        <div class="flex gap-1.5 font-mono text-xs">
+                            <button onclick="handleWin(${index})" class="border border-te-gray bg-black text-te-light w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center hover:bg-te-yellow hover:text-black hover:border-te-yellow transition-none" title="WIN">
+                                WIN
+                            </button>
+                            <button onclick="handleLoss(${index})" class="border border-te-gray bg-black text-te-light w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center hover:bg-te-orange hover:text-black hover:border-te-orange transition-none" title="LOSS">
+                                LOS
+                            </button>
+                            <button onclick="openEditModal(${index})" class="border border-te-gray bg-te-dark text-gray-400 w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center hover:bg-white hover:text-black hover:border-white transition-none ml-1" title="EDIT">
+                                EDT
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                scoreboardGrid.appendChild(row);
+            });
+        }
+
+        function openEditModal(index) {
+            currentlyEditingIndex = index;
+            editPlayerName.textContent = `TARGET: ${players[index].name}`;
+            newScoreInput.value = players[index].score;
+            
+            editModal.classList.remove('hidden');
+            editModal.classList.add('flex');
+            
+            newScoreInput.focus();
+            newScoreInput.select();
+        }
+
+        function closeEditModal() {
+            editModal.classList.add('hidden');
+            editModal.classList.remove('flex');
+            currentlyEditingIndex = -1;
+        }
+
+        cancelEditBtn.addEventListener('click', closeEditModal);
+        editModalBackdrop.addEventListener('click', closeEditModal);
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !editModal.classList.contains('hidden')) {
+                closeEditModal();
+            }
+        });
+
+        newScoreInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                saveEditBtn.click();
+            }
+        });
+
+        saveEditBtn.addEventListener('click', () => {
+            if (currentlyEditingIndex !== -1) {
+                const newScore = parseInt(newScoreInput.value, 10);
+                if (!isNaN(newScore)) {
+                    players[currentlyEditingIndex].score = newScore;
+                    animateScoreChange(currentlyEditingIndex);
+                    renderScoreboard();
+                    closeEditModal();
+                }
+            }
+        });
+
+        // Initialize App
+        initSetup();
+
+    </script>
+</body>
+</html>
